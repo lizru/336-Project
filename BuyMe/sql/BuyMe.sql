@@ -120,7 +120,7 @@ CREATE TABLE sells (
 CREATE TABLE category (
 	category_id int primary key,
     cat_name varchar(50),
-    cat_description TEXT,
+    cat_description TEXT
 );
     
 CREATE TABLE sub_category (
