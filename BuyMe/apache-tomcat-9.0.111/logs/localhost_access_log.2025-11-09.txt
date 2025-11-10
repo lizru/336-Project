@@ -1,0 +1,15 @@
+127.0.0.1 - - [09/Nov/2025:18:57:40 -0500] "GET /BuyMe/login.jsp HTTP/1.1" 200 381
+127.0.0.1 - - [09/Nov/2025:18:57:40 -0500] "GET /favicon.ico HTTP/1.1" 200 8192
+127.0.0.1 - - [09/Nov/2025:18:57:47 -0500] "POST /BuyMe/checkLoginDetails.jsp HTTP/1.1" 500 4264
+127.0.0.1 - - [09/Nov/2025:18:58:29 -0500] "POST /BuyMe/checkLoginDetails.jsp HTTP/1.1" 500 4264
+127.0.0.1 - - [09/Nov/2025:18:58:30 -0500] "GET /favicon.ico HTTP/1.1" 200 8192
+127.0.0.1 - - [09/Nov/2025:19:01:00 -0500] "GET /BuyMe/login.jsp HTTP/1.1" 200 381
+127.0.0.1 - - [09/Nov/2025:19:01:00 -0500] "GET /favicon.ico HTTP/1.1" 200 21630
+127.0.0.1 - - [09/Nov/2025:19:01:05 -0500] "POST /BuyMe/checkLoginDetails.jsp HTTP/1.1" 200 53
+127.0.0.1 - - [09/Nov/2025:19:01:24 -0500] "GET /BuyMe/logout.jsp HTTP/1.1" 500 2490
+127.0.0.1 - - [09/Nov/2025:19:02:57 -0500] "GET /BuyMe/logout.jsp HTTP/1.1" 302 -
+127.0.0.1 - - [09/Nov/2025:19:02:57 -0500] "GET /BuyMe/login.jsp HTTP/1.1" 200 381
+127.0.0.1 - - [09/Nov/2025:19:02:57 -0500] "GET /favicon.ico HTTP/1.1" 200 8192
+127.0.0.1 - - [09/Nov/2025:19:03:02 -0500] "POST /BuyMe/checkLoginDetails.jsp HTTP/1.1" 200 53
+127.0.0.1 - - [09/Nov/2025:19:03:04 -0500] "GET /BuyMe/logout.jsp HTTP/1.1" 302 -
+127.0.0.1 - - [09/Nov/2025:19:03:04 -0500] "GET /BuyMe/login.jsp HTTP/1.1" 200 381
