@@ -13,3 +13,6 @@
     } else {
         out.println("<script>alert('Invalid username or password'); window.location='login.jsp';</script>");
     }
+    if ("admin".equals(role)) {
+    response.sendRedirect("admin.jsp");
+    } 
