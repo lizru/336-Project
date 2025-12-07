@@ -131,5 +131,31 @@ CREATE TABLE sub_category (
     FOREIGN KEY (category_id) REFERENCES category(category_id)
 );
 
+-- customer representative Q&A system
+CREATE TABLE question (
+    question_id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT,
+    title VARCHAR(100),
+    question_text TEXT,
+    date_posted DATETIME,
+    status VARCHAR(20) DEFAULT 'open',
+    FOREIGN KEY (user_id) REFERENCES user(user_id)
+);
+
+CREATE TABLE reply (
+    reply_id INT AUTO_INCREMENT PRIMARY KEY,
+    question_id INT,
+    rep_id INT,
+    reply_text TEXT,
+    date_replied DATETIME,
+    FOREIGN KEY (question_id) REFERENCES question(question_id),
+    FOREIGN KEY (rep_id) REFERENCES customer_representative(rep_id)
+);
+
+--
+
+
+
+
 INSERT INTO admin (admin_id, admin_name, admin_password, email)
 VALUES (1, 'Jaiveer', 'root', 'jaiveer.singh2913@gmail.com');
