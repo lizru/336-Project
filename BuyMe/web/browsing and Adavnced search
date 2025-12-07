@@ -1,0 +1,486 @@
+<%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+<%@ page import="java.sql.*" %>
+<%@ page import="java.util.*" %>
+<%
+    String dbURL = "jdbc:mysql://localhost:3306/vehicle_auction";
+    String dbUser = "root";
+    String dbPass = "password";
+    
+    Connection conn = null;
+    PreparedStatement pstmt = null;
+    ResultSet rs = null;
+    
+    String searchTerm = request.getParameter("search") != null ? request.getParameter("search") : "";
+    String typeFilter = request.getParameter("type") != null ? request.getParameter("type") : "";
+    String makeFilter = request.getParameter("make") != null ? request.getParameter("make") : "";
+    String statusFilter = request.getParameter("status") != null ? request.getParameter("status") : "";
+    String minPriceStr = request.getParameter("minPrice");
+    String maxPriceStr = request.getParameter("maxPrice");
+    String sortBy = request.getParameter("sortBy") != null ? request.getParameter("sortBy") : "price-low";
+    String view = request.getParameter("view") != null ? request.getParameter("view") : "browse";
+    String action = request.getParameter("action");
+    
+    double minPrice = 0;
+    double maxPrice = Double.MAX_VALUE;
+    
+    if (minPriceStr != null && !minPriceStr.isEmpty()) {
+        minPrice = Double.parseDouble(minPriceStr);
+    }
+    if (maxPriceStr != null && !maxPriceStr.isEmpty()) {
+        maxPrice = Double.parseDouble(maxPriceStr);
+    }
+    
+    if (action != null && action.equals("delete-alert")) {
+        try {
+            Class.forName("com.mysql.cj.jdbc.Driver");
+            conn = DriverManager.getConnection(dbURL, dbUser, dbPass);
+            String alertId = request.getParameter("alert_id");
+            pstmt = conn.prepareStatement("DELETE FROM price_alerts WHERE alert_id = ?");
+            pstmt.setInt(1, Integer.parseInt(alertId));
+            pstmt.executeUpdate();
+            response.sendRedirect("browse.jsp?view=alerts");
+            return;
+        } catch (Exception e) {
+            out.println("<p style='color:red;'>Error: " + e.getMessage() + "</p>");
+        } finally {
+            if (pstmt != null) try { pstmt.close(); } catch (SQLException e) {}
+            if (conn != null) try { conn.close(); } catch (SQLException e) {}
+        }
+    }
+%>
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Vehicle Auction - Browse & Search</title>
+</head>
+<body>
+    <h1>Vehicle Auction System</h1>
+    
+    <!-- Search and Filter Form -->
+    <form method="GET" action="browse.jsp">
+        <h2>Search & Filter</h2>
+        
+        <label>Search:</label>
+        <input type="text" name="search" value="<%= searchTerm %>" placeholder="Search make, model, year...">
+        
+        <label>Type:</label>
+        <select name="type">
+            <option value="">All Types</option>
+            <option value="car" <%= typeFilter.equals("car") ? "selected" : "" %>>Car</option>
+            <option value="boat" <%= typeFilter.equals("boat") ? "selected" : "" %>>Boat</option>
+            <option value="bike" <%= typeFilter.equals("bike") ? "selected" : "" %>>Bike</option>
+        </select>
+        
+        <label>Make:</label>
+        <input type="text" name="make" value="<%= makeFilter %>" placeholder="Any Make">
+        
+        <label>Status:</label>
+        <select name="status">
+            <option value="">All Status</option>
+            <option value="active" <%= statusFilter.equals("active") ? "selected" : "" %>>Active</option>
+            <option value="ending" <%= statusFilter.equals("ending") ? "selected" : "" %>>Ending Soon</option>
+            <option value="closed" <%= statusFilter.equals("closed") ? "selected" : "" %>>Closed</option>
+        </select>
+        
+        <label>Min Price:</label>
+        <input type="number" name="minPrice" value="<%= minPriceStr != null ? minPriceStr : "" %>" placeholder="0">
+        
+        <label>Max Price:</label>
+        <input type="number" name="maxPrice" value="<%= maxPriceStr != null ? maxPriceStr : "" %>" placeholder="999999">
+        
+        <label>Sort By:</label>
+        <select name="sortBy">
+            <option value="price-low" <%= sortBy.equals("price-low") ? "selected" : "" %>>Price: Low to High</option>
+            <option value="price-high" <%= sortBy.equals("price-high") ? "selected" : "" %>>Price: High to Low</option>
+            <option value="year-new" <%= sortBy.equals("year-new") ? "selected" : "" %>>Year: Newest</option>
+            <option value="year-old" <%= sortBy.equals("year-old") ? "selected" : "" %>>Year: Oldest</option>
+            <option value="mileage" <%= sortBy.equals("mileage") ? "selected" : "" %>>Mileage: Low to High</option>
+        </select>
+        
+        <input type="hidden" name="view" value="<%= view %>">
+        <button type="submit">Apply Filters</button>
+    </form>
+    
+    <hr>
+    
+    <!-- Navigation Menu -->
+    <h3>Navigation</h3>
+    <form method="GET" action="browse.jsp" style="display:inline;">
+        <input type="hidden" name="view" value="browse">
+        <button type="submit">Browse All Vehicles</button>
+    </form>
+    <form method="GET" action="browse.jsp" style="display:inline;">
+        <input type="hidden" name="view" value="my-bids">
+        <button type="submit">My Bids</button>
+    </form>
+    <form method="GET" action="browse.jsp" style="display:inline;">
+        <input type="hidden" name="view" value="my-auctions">
+        <button type="submit">My Listings</button>
+    </form>
+    <form method="GET" action="browse.jsp" style="display:inline;">
+        <input type="hidden" name="view" value="alerts">
+        <button type="submit">Price Alerts</button>
+    </form>
+    
+    <hr>
+    
+    <%
+    try {
+        Class.forName("com.mysql.cj.jdbc.Driver");
+        conn = DriverManager.getConnection(dbURL, dbUser, dbPass);
+        
+        String sql = "";
+        
+        if (view.equals("browse")) {
+            sql = "SELECT v.vehicle_id, v.type, v.make, v.model, v.year, v.mileage, v.color, " +
+                  "v.condition, a.current_price, a.status, a.auction_id, " +
+                  "COUNT(b.bid_id) as bid_count, s.seller_name " +
+                  "FROM vehicles v " +
+                  "JOIN auctions a ON v.vehicle_id = a.vehicle_id " +
+                  "LEFT JOIN bids b ON a.auction_id = b.auction_id " +
+                  "LEFT JOIN sellers s ON a.seller_id = s.seller_id " +
+                  "WHERE 1=1 ";
+            
+            if (!searchTerm.isEmpty()) {
+                sql += "AND (LOWER(v.make) LIKE ? OR LOWER(v.model) LIKE ? OR CAST(v.year AS CHAR) LIKE ?) ";
+            }
+            if (!typeFilter.isEmpty()) {
+                sql += "AND v.type = ? ";
+            }
+            if (!makeFilter.isEmpty()) {
+                sql += "AND LOWER(v.make) = ? ";
+            }
+            if (!statusFilter.isEmpty()) {
+                sql += "AND a.status = ? ";
+            }
+            sql += "AND a.current_price >= ? AND a.current_price <= ? ";
+            
+            sql += "GROUP BY v.vehicle_id, a.auction_id ";
+            
+            switch(sortBy) {
+                case "price-low": sql += "ORDER BY a.current_price ASC"; break;
+                case "price-high": sql += "ORDER BY a.current_price DESC"; break;
+                case "year-new": sql += "ORDER BY v.year DESC"; break;
+                case "year-old": sql += "ORDER BY v.year ASC"; break;
+                case "mileage": sql += "ORDER BY v.mileage ASC"; break;
+                default: sql += "ORDER BY a.current_price ASC";
+            }
+            
+        } else if (view.equals("my-bids")) {
+            Integer userId = (Integer) session.getAttribute("user_id");
+            if (userId == null) userId = 1;
+            
+            sql = "SELECT DISTINCT v.vehicle_id, v.type, v.make, v.model, v.year, v.mileage, v.color, " +
+                  "v.condition, a.current_price, a.status, a.auction_id, " +
+                  "COUNT(b2.bid_id) as bid_count, s.seller_name " +
+                  "FROM vehicles v " +
+                  "JOIN auctions a ON v.vehicle_id = a.vehicle_id " +
+                  "JOIN bids b ON a.auction_id = b.auction_id AND b.user_id = ? " +
+                  "LEFT JOIN bids b2 ON a.auction_id = b2.auction_id " +
+                  "LEFT JOIN sellers s ON a.seller_id = s.seller_id " +
+                  "GROUP BY v.vehicle_id, a.auction_id " +
+                  "ORDER BY a.current_price DESC";
+                  
+        } else if (view.equals("my-auctions")) {
+            Integer sellerId = (Integer) session.getAttribute("seller_id");
+            if (sellerId == null) sellerId = 1;
+            
+            sql = "SELECT v.vehicle_id, v.type, v.make, v.model, v.year, v.mileage, v.color, " +
+                  "v.condition, a.current_price, a.status, a.auction_id, " +
+                  "COUNT(b.bid_id) as bid_count, s.seller_name " +
+                  "FROM vehicles v " +
+                  "JOIN auctions a ON v.vehicle_id = a.vehicle_id AND a.seller_id = ? " +
+                  "LEFT JOIN bids b ON a.auction_id = b.auction_id " +
+                  "LEFT JOIN sellers s ON a.seller_id = s.seller_id " +
+                  "GROUP BY v.vehicle_id, a.auction_id " +
+                  "ORDER BY a.current_price DESC";
+                  
+        } else if (view.equals("alerts")) {
+            Integer userId = (Integer) session.getAttribute("user_id");
+            if (userId == null) userId = 1;
+            
+            sql = "SELECT pa.alert_id, v.vehicle_id, v.type, v.make, v.model, v.year, " +
+                  "pa.target_price, pa.email, pa.created_at " +
+                  "FROM price_alerts pa " +
+                  "JOIN vehicles v ON pa.vehicle_id = v.vehicle_id " +
+                  "WHERE pa.user_id = ? " +
+                  "ORDER BY pa.created_at DESC";
+        } else if (view.equals("details")) {
+            String vehicleId = request.getParameter("vehicle_id");
+            sql = "SELECT v.*, a.current_price, a.status, a.auction_id, s.seller_name, " +
+                  "COUNT(b.bid_id) as bid_count " +
+                  "FROM vehicles v " +
+                  "JOIN auctions a ON v.vehicle_id = a.vehicle_id " +
+                  "LEFT JOIN bids b ON a.auction_id = b.auction_id " +
+                  "LEFT JOIN sellers s ON a.seller_id = s.seller_id " +
+                  "WHERE v.vehicle_id = ? " +
+                  "GROUP BY v.vehicle_id, a.auction_id";
+        } else if (view.equals("bid-history")) {
+            String auctionId = request.getParameter("auction_id");
+            sql = "SELECT b.bid_amount, b.bid_time, u.username, v.make, v.model, v.year " +
+                  "FROM bids b " +
+                  "JOIN users u ON b.user_id = u.user_id " +
+                  "JOIN auctions a ON b.auction_id = a.auction_id " +
+                  "JOIN vehicles v ON a.vehicle_id = v.vehicle_id " +
+                  "WHERE b.auction_id = ? " +
+                  "ORDER BY b.bid_time DESC";
+        } else if (view.equals("set-alert")) {
+            if (request.getMethod().equals("POST")) {
+                try {
+                    Integer userId = (Integer) session.getAttribute("user_id");
+                    if (userId == null) userId = 1;
+                    String vehicleId = request.getParameter("vehicle_id");
+                    String email = request.getParameter("email");
+                    String targetPrice = request.getParameter("target_price");
+                    
+                    pstmt = conn.prepareStatement("INSERT INTO price_alerts (user_id, vehicle_id, email, target_price) VALUES (?, ?, ?, ?)");
+                    pstmt.setInt(1, userId);
+                    pstmt.setInt(2, Integer.parseInt(vehicleId));
+                    pstmt.setString(3, email);
+                    pstmt.setDouble(4, Double.parseDouble(targetPrice));
+                    pstmt.executeUpdate();
+                    response.sendRedirect("browse.jsp?view=alerts");
+                    return;
+                } catch (Exception e) {
+                    out.println("<p style='color:red;'>Error: " + e.getMessage() + "</p>");
+                }
+            }
+        }
+        
+        pstmt = conn.prepareStatement(sql);
+        
+        int paramIndex = 1;
+        
+        if (view.equals("browse")) {
+            if (!searchTerm.isEmpty()) {
+                String searchPattern = "%" + searchTerm.toLowerCase() + "%";
+                pstmt.setString(paramIndex++, searchPattern);
+                pstmt.setString(paramIndex++, searchPattern);
+                pstmt.setString(paramIndex++, searchPattern);
+            }
+            if (!typeFilter.isEmpty()) {
+                pstmt.setString(paramIndex++, typeFilter);
+            }
+            if (!makeFilter.isEmpty()) {
+                pstmt.setString(paramIndex++, makeFilter.toLowerCase());
+            }
+            if (!statusFilter.isEmpty()) {
+                pstmt.setString(paramIndex++, statusFilter);
+            }
+            pstmt.setDouble(paramIndex++, minPrice);
+            pstmt.setDouble(paramIndex++, maxPrice);
+            
+        } else if (view.equals("my-bids")) {
+            Integer userId = (Integer) session.getAttribute("user_id");
+            if (userId == null) userId = 1;
+            pstmt.setInt(paramIndex++, userId);
+            
+        } else if (view.equals("my-auctions")) {
+            Integer sellerId = (Integer) session.getAttribute("seller_id");
+            if (sellerId == null) sellerId = 1;
+            pstmt.setInt(paramIndex++, sellerId);
+            
+        } else if (view.equals("alerts")) {
+            Integer userId = (Integer) session.getAttribute("user_id");
+            if (userId == null) userId = 1;
+            pstmt.setInt(paramIndex++, userId);
+        } else if (view.equals("details")) {
+            String vehicleId = request.getParameter("vehicle_id");
+            pstmt.setInt(paramIndex++, Integer.parseInt(vehicleId));
+        } else if (view.equals("bid-history")) {
+            String auctionId = request.getParameter("auction_id");
+            pstmt.setInt(paramIndex++, Integer.parseInt(auctionId));
+        }
+        
+        rs = pstmt.executeQuery();
+        
+        if (view.equals("alerts")) {
+    %>
+            <h2>My Price Alerts</h2>
+            <table border="1">
+                <tr>
+                    <th>Vehicle</th>
+                    <th>Target Price</th>
+                    <th>Email</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                </tr>
+    <%
+            while (rs.next()) {
+    %>
+                <tr>
+                    <td><%= rs.getString("year") %> <%= rs.getString("make") %> <%= rs.getString("model") %></td>
+                    <td>$<%= String.format("%,.2f", rs.getDouble("target_price")) %></td>
+                    <td><%= rs.getString("email") %></td>
+                    <td><%= rs.getTimestamp("created_at") %></td>
+                    <td>
+                        <form method="POST" action="browse.jsp" style="display:inline;">
+                            <input type="hidden" name="alert_id" value="<%= rs.getInt("alert_id") %>">
+                            <input type="hidden" name="action" value="delete-alert">
+                            <button type="submit">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+    <%
+            }
+    %>
+            </table>
+    <%
+        } else if (view.equals("details")) {
+            if (rs.next()) {
+    %>
+                <h2>Vehicle Details</h2>
+                <table border="1">
+                    <tr><th>Type</th><td><%= rs.getString("type") %></td></tr>
+                    <tr><th>Make</th><td><%= rs.getString("make") %></td></tr>
+                    <tr><th>Model</th><td><%= rs.getString("model") %></td></tr>
+                    <tr><th>Year</th><td><%= rs.getInt("year") %></td></tr>
+                    <tr><th>Mileage</th><td><%= String.format("%,d", rs.getInt("mileage")) %> mi</td></tr>
+                    <tr><th>Color</th><td><%= rs.getString("color") %></td></tr>
+                    <tr><th>Condition</th><td><%= rs.getString("condition") %></td></tr>
+                    <tr><th>Current Price</th><td>$<%= String.format("%,.2f", rs.getDouble("current_price")) %></td></tr>
+                    <tr><th>Status</th><td><%= rs.getString("status") %></td></tr>
+                    <tr><th>Total Bids</th><td><%= rs.getInt("bid_count") %></td></tr>
+                    <tr><th>Seller</th><td><%= rs.getString("seller_name") %></td></tr>
+                </table>
+                <br>
+                <form method="GET" action="browse.jsp">
+                    <button type="submit">Back to Browse</button>
+                </form>
+    <%
+            }
+        } else if (view.equals("bid-history")) {
+    %>
+            <h2>Bid History</h2>
+            <table border="1">
+                <tr>
+                    <th>Bidder</th>
+                    <th>Amount</th>
+                    <th>Time</th>
+                </tr>
+    <%
+            while (rs.next()) {
+    %>
+                <tr>
+                    <td><%= rs.getString("username") %></td>
+                    <td>$<%= String.format("%,.2f", rs.getDouble("bid_amount")) %></td>
+                    <td><%= rs.getTimestamp("bid_time") %></td>
+                </tr>
+    <%
+            }
+    %>
+            </table>
+            <br>
+            <form method="GET" action="browse.jsp">
+                <button type="submit">Back to Browse</button>
+            </form>
+    <%
+        } else if (view.equals("set-alert")) {
+            String vehicleId = request.getParameter("vehicle_id");
+    %>
+            <h2>Set Price Alert</h2>
+            <form method="POST" action="browse.jsp">
+                <input type="hidden" name="view" value="set-alert">
+                <input type="hidden" name="vehicle_id" value="<%= vehicleId %>">
+                <label>Email:</label>
+                <input type="email" name="email" required><br>
+                <label>Target Price:</label>
+                <input type="number" name="target_price" step="0.01" required><br>
+                <button type="submit">Create Alert</button>
+            </form>
+            <br>
+            <form method="GET" action="browse.jsp">
+                <button type="submit">Back to Browse</button>
+            </form>
+    <%
+        } else {
+    %>
+            <h2>
+            <% if (view.equals("browse")) { %>
+                Browse All Vehicles
+            <% } else if (view.equals("my-bids")) { %>
+                My Bids
+            <% } else if (view.equals("my-auctions")) { %>
+                My Listings
+            <% } %>
+            </h2>
+            
+            <table border="1">
+                <tr>
+                    <th>Type</th>
+                    <th>Make</th>
+                    <th>Model</th>
+                    <th>Year</th>
+                    <th>Mileage</th>
+                    <th>Color</th>
+                    <th>Condition</th>
+                    <th>Price</th>
+                    <th>Status</th>
+                    <th>Bids</th>
+                    <th>Seller</th>
+                    <th>Actions</th>
+                </tr>
+    <%
+            int count = 0;
+            while (rs.next()) {
+                count++;
+    %>
+                <tr>
+                    <td><%= rs.getString("type") %></td>
+                    <td><%= rs.getString("make") %></td>
+                    <td><%= rs.getString("model") %></td>
+                    <td><%= rs.getInt("year") %></td>
+                    <td><%= String.format("%,d", rs.getInt("mileage")) %> mi</td>
+                    <td><%= rs.getString("color") %></td>
+                    <td><%= rs.getString("condition") %></td>
+                    <td>$<%= String.format("%,.2f", rs.getDouble("current_price")) %></td>
+                    <td><%= rs.getString("status") %></td>
+                    <td><%= rs.getInt("bid_count") %></td>
+                    <td><%= rs.getString("seller_name") %></td>
+                    <td>
+                        <form method="GET" action="browse.jsp" style="display:inline;">
+                            <input type="hidden" name="vehicle_id" value="<%= rs.getInt("vehicle_id") %>">
+                            <input type="hidden" name="view" value="details">
+                            <button type="submit">Details</button>
+                        </form>
+                        <form method="GET" action="browse.jsp" style="display:inline;">
+                            <input type="hidden" name="auction_id" value="<%= rs.getInt("auction_id") %>">
+                            <input type="hidden" name="view" value="bid-history">
+                            <button type="submit">Bid History</button>
+                        </form>
+                        <form method="GET" action="browse.jsp" style="display:inline;">
+                            <input type="hidden" name="vehicle_id" value="<%= rs.getInt("vehicle_id") %>">
+                            <input type="hidden" name="view" value="set-alert">
+                            <button type="submit">Set Alert</button>
+                        </form>
+                    </td>
+                </tr>
+    <%
+            }
+            
+            if (count == 0) {
+    %>
+                <tr>
+                    <td colspan="12">No vehicles found.</td>
+                </tr>
+    <%
+            }
+    %>
+            </table>
+            <p>Total: <%= count %> vehicles</p>
+    <%
+        }
+        
+    } catch (Exception e) {
+        out.println("<p style='color:red;'>Error: " + e.getMessage() + "</p>");
+        e.printStackTrace();
+    } finally {
+        if (rs != null) try { rs.close(); } catch (SQLException e) {}
+        if (pstmt != null) try { pstmt.close(); } catch (SQLException e) {}
+        if (conn != null) try { conn.close(); } catch (SQLException e) {}
+    }
+    %>
+    
+</body>
+</html>
